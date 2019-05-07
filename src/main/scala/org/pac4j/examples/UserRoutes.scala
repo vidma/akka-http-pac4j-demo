@@ -2,10 +2,11 @@ package org.pac4j.examples
 
 import akka.actor.{ ActorRef, ActorSystem }
 import akka.event.Logging
+import akka.http.scaladsl.model.StatusCodes.SeeOther
 
 import scala.concurrent.duration._
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.model.{ ContentTypes, HttpEntity, StatusCodes }
+import akka.http.scaladsl.model.{ ContentTypes, HttpEntity, HttpResponse, StatusCodes }
 import akka.http.scaladsl.server.{ Route, StandardRoute }
 import akka.http.scaladsl.server.directives.MethodDirectives.delete
 import akka.http.scaladsl.server.directives.MethodDirectives.get
@@ -62,6 +63,8 @@ object SimplePages {
                   |
                   |  <a href="/auth/login">login with LDAP</a><br>
                   |
+                  |  <a href="/auth/saml-login">login with SAML</a><br>
+                  |
                   |  <a href="/auth/logout">logout</a><br>
                   |
                   |</form>
@@ -84,7 +87,9 @@ trait UserRoutes extends JsonSupport {
 
   def securityConfig: Config
 
-  lazy val ldapCallbackUrl = Try(securityConfig.getClients.findClient("FormClient").asInstanceOf[FormClient].getCallbackUrl).getOrElse("")
+  lazy val ldapCallbackUrl = Try(securityConfig.getClients.findClient("FormClient").asInstanceOf[FormClient].getCallbackUrl + "?client_name=FormClient").getOrElse("")
+
+  lazy val defaultUrl = "/"
 
   //#all-routes
   //#users-get-post
@@ -94,22 +99,32 @@ trait UserRoutes extends JsonSupport {
       path("") {
         SimplePages.index()
       },
+      // for SAML test with openidp.feide.no the callback must be reachable at /callback
+      path("callback") {
+        security.callback(defaultUrl = defaultUrl)
+      },
       pathPrefix("auth") {
         concat(
-          path("callback") {
-            security.callback(defaultUrl = "/")
-          },
+          //          path("callback") {
+          //            security.callback(defaultUrl)
+          //          },
           path("logout") {
-            security.logout(defaultUrl = "/")
+            security.logout(defaultUrl)
           },
           path("login") {
             get {
               SimplePages.loginForm(callbackUrl = ldapCallbackUrl)
             }
+          },
+          path("saml-login") {
+            get {
+              security.withAuthentication(clients = "SAML2Client") { _: AuthenticatedRequest =>
+                redirect(defaultUrl, StatusCodes.TemporaryRedirect)
+              }
+            }
           })
       },
       path("users") {
-        // security.withAuthentication(clients = "FormClient") { authReq: AuthenticatedRequest =>
         security.withAllClientsAuthentication() { authReq: AuthenticatedRequest =>
           get {
             complete(Users(authReq.profiles.map(p => User(name = p.getId))))

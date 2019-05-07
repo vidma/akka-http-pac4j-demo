@@ -1,6 +1,8 @@
 package org.pac4j.examples
 
 //#quick-start-server
+import java.io.File
+
 import scala.concurrent.{ Await, ExecutionContext, Future }
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.util.{ Failure, Success }
@@ -23,6 +25,7 @@ import com.stackstate.pac4j.http.AkkaHttpActionAdapter
 import org.pac4j.core.context.HttpConstants
 import org.pac4j.core.http.adapter.HttpActionAdapter
 import akka.http.scaladsl.model.StatusCodes._
+import org.pac4j.saml.client.{ SAML2Client, SAML2ClientConfiguration }
 
 //#main-class
 object QuickstartServer extends App with UserRoutes {
@@ -37,6 +40,14 @@ object QuickstartServer extends App with UserRoutes {
   implicit val executionContext: ExecutionContext = system.dispatcher
   //#server-bootstrapping
 
+  def provideSaml2Client: SAML2Client = {
+    val cfg = new SAML2ClientConfiguration("resource:samlKeystore.jks", "pac4j-demo-passwd", "pac4j-demo-passwd", "resource:openidp-feide.xml")
+    cfg.setMaximumAuthenticationLifetime(3600)
+    cfg.setServiceProviderEntityId("urn:mace:saml:pac4j.org")
+    cfg.setServiceProviderMetadataPath(new File("target", "sp-metadata.xml").getAbsolutePath)
+    new SAML2Client(cfg)
+  }
+
   lazy val securityConfig: Config = {
     val ldapSettings = LdapAuthSettingsData(
       server = "ldap://ldap.forumsys.com:389",
@@ -44,27 +55,27 @@ object QuickstartServer extends App with UserRoutes {
       basePeopleDn = "dc=example,dc=com",
       groupsAttribute = "objectClass")
 
-    val callbackBaseUrl = "/auth"
-    // val loginUrl = getBaseUrl(conf) + conf.get[String]("pac4j.login_url")
+    // val callbackBaseUrl = "/auth"
+    // SAML v2 requires a full baseUrl (with host)
+    val callbackBaseUrl = "http://localhost:9000"
+
     val loginUrl = "/auth/login"
 
     // modify here to any other Auth method supported by pac4j
-    val authClientNames = Seq("FormClient")
+    val authClientNames = Seq("FormClient", "SAML2Client")
 
     val enabledClients = authClientNames.map {
       case "FormClient" =>
         val ldapAuthenticator = LdapAuthenticatorFactory.createLdapAuthenticator(ldapSettings)
         new FormClient(loginUrl, ldapAuthenticator)
+      case "SAML2Client" => provideSaml2Client
     }
 
     val clients = new Clients(callbackBaseUrl + "/callback", enabledClients: _*)
     val config = new Config(clients)
 
-    //val logoutUrl = conf.getOptional[String]("pac4j.logout_url").getOrElse("/logout")
-    //val loginUrl =  conf.getOptional[String]("pac4j.login_url").getOrElse("/login")
-
     // make non-authorized not redirect!
-    config.setHttpActionAdapter(new ForbiddenWithoutRedirectActionAdapter(loginUrl, logoutUrl = "/auth/logout"))
+    config.setHttpActionAdapter(new ForbiddenWithoutRedirectActionAdapter())
     config
   }
 
@@ -78,7 +89,7 @@ object QuickstartServer extends App with UserRoutes {
   //#main-class
 
   //#http-server
-  val serverBinding: Future[Http.ServerBinding] = Http().bindAndHandle(routes, "localhost", 8080)
+  val serverBinding: Future[Http.ServerBinding] = Http().bindAndHandle(routes, "localhost", 9000)
 
   serverBinding.onComplete {
     case Success(bound) =>
@@ -96,7 +107,7 @@ object QuickstartServer extends App with UserRoutes {
 //#main-class
 //#quick-start-server
 
-class ForbiddenWithoutRedirectActionAdapter(loginUrl: String, logoutUrl: String) extends HttpActionAdapter[Future[RouteResult], AkkaHttpWebContext] {
+class ForbiddenWithoutRedirectActionAdapter extends HttpActionAdapter[Future[RouteResult], AkkaHttpWebContext] {
   override def adapt(code: Int, context: AkkaHttpWebContext): Future[Complete] = {
     code match {
       // Prevent FormClient to redirect to loginUrl when page is unaccessible
