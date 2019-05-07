@@ -3,7 +3,7 @@
 ```bash
 git clone git@github.com:vidma/akka-http-pac4j.git
 cd akka-http-pac4j
-sbt publishLocal
+sbt +publishLocal
 ```
 
 2. Run the app with:
