@@ -40,45 +40,7 @@ object QuickstartServer extends App with UserRoutes {
   implicit val executionContext: ExecutionContext = system.dispatcher
   //#server-bootstrapping
 
-  def provideSaml2Client: SAML2Client = {
-    val cfg = new SAML2ClientConfiguration("resource:samlKeystore.jks", "pac4j-demo-passwd", "pac4j-demo-passwd", "resource:openidp-feide.xml")
-    cfg.setMaximumAuthenticationLifetime(3600)
-    cfg.setServiceProviderEntityId("urn:mace:saml:pac4j.org")
-    cfg.setServiceProviderMetadataPath(new File("target", "sp-metadata.xml").getAbsolutePath)
-    new SAML2Client(cfg)
-  }
-
-  lazy val securityConfig: Config = {
-    val ldapSettings = LdapAuthSettingsData(
-      server = "ldap://ldap.forumsys.com:389",
-      usersDN = "cn=read-only-admin,dc=example,dc=com",
-      basePeopleDn = "dc=example,dc=com",
-      groupsAttribute = "objectClass")
-
-    // val callbackBaseUrl = "/auth"
-    // SAML v2 requires a full baseUrl (with host)
-    val callbackBaseUrl = "http://localhost:9000"
-
-    val loginUrl = "/auth/login"
-
-    // modify here to any other Auth method supported by pac4j
-    val authClientNames = Seq("FormClient", "SAML2Client")
-
-    val enabledClients = authClientNames.map {
-      case "FormClient" =>
-        val ldapAuthenticator = LdapAuthenticatorFactory.createLdapAuthenticator(ldapSettings)
-        new FormClient(loginUrl, ldapAuthenticator)
-      case "SAML2Client" => provideSaml2Client
-    }
-
-    val clients = new Clients(callbackBaseUrl + "/callback", enabledClients: _*)
-    val config = new Config(clients)
-
-    // make non-authorized not redirect!
-    config.setHttpActionAdapter(new ForbiddenWithoutRedirectActionAdapter())
-    config
-  }
-
+  lazy val securityConfig = new SampleAuthConfiguration().buildConfig
   import scala.concurrent.duration._
   val sessionStorage = new InMemorySessionStorage(sessionLifetime = 10.minutes) // FIXME: make configurable
   lazy val security: AkkaHttpSecurity = new AkkaHttpSecurity(securityConfig, sessionStorage, sessionCookieName = "SessionId")
@@ -106,6 +68,54 @@ object QuickstartServer extends App with UserRoutes {
 }
 //#main-class
 //#quick-start-server
+
+class SampleAuthConfiguration() {
+  def buildConfig = {
+
+    def provideSaml2Client: SAML2Client = {
+      val cfg = new SAML2ClientConfiguration("resource:samlKeystore.jks", "pac4j-demo-passwd", "pac4j-demo-passwd", "resource:openidp-feide.xml")
+      cfg.setMaximumAuthenticationLifetime(3600)
+      cfg.setServiceProviderEntityId("urn:mace:saml:pac4j.org")
+      cfg.setServiceProviderMetadataPath(new File("target", "sp-metadata.xml").getAbsolutePath)
+      new SAML2Client(cfg)
+    }
+
+    lazy val securityConfig: Config = {
+      val ldapSettings = LdapAuthSettingsData(
+        server = "ldap://ldap.forumsys.com:389",
+        usersDN = "cn=read-only-admin,dc=example,dc=com",
+        basePeopleDn = "dc=example,dc=com",
+        groupsAttribute = "objectClass")
+
+      // val callbackBaseUrl = "/auth"
+      // SAML v2 requires a full baseUrl (with host)
+      val callbackBaseUrl = "http://localhost:9000"
+
+      val loginUrl = "/auth/login"
+
+      // modify here to any other Auth method supported by pac4j
+      val authClientNames = Seq("FormClient", "SAML2Client")
+
+      val enabledClients = authClientNames.map {
+        case "FormClient" =>
+          val ldapAuthenticator = LdapAuthenticatorFactory.createLdapAuthenticator(ldapSettings)
+          new FormClient(loginUrl, ldapAuthenticator)
+        case "SAML2Client" => provideSaml2Client
+      }
+
+      val clients = new Clients(callbackBaseUrl + "/callback", enabledClients: _*)
+      val config = new Config(clients)
+
+      // make non-authorized not redirect!
+      config.setHttpActionAdapter(new ForbiddenWithoutRedirectActionAdapter())
+      config
+    }
+
+    securityConfig
+
+  }
+}
+
 
 class ForbiddenWithoutRedirectActionAdapter extends HttpActionAdapter[Future[RouteResult], AkkaHttpWebContext] {
   override def adapt(code: Int, context: AkkaHttpWebContext): Future[Complete] = {
