@@ -81,7 +81,7 @@ object QuickstartServer extends App with UserRoutes {
 
   import scala.concurrent.duration._
   val sessionStorage = new InMemorySessionStorage(sessionLifetime = 10.minutes) // FIXME: make configurable
-  lazy val security: AkkaHttpSecurity = new AkkaHttpSecurity(securityConfig, sessionStorage)
+  lazy val security: AkkaHttpSecurity = new AkkaHttpSecurity(securityConfig, sessionStorage, sessionCookieName = "SessionId")
 
   //#main-class
   // from the UserRoutes trait

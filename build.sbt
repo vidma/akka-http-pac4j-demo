@@ -1,7 +1,7 @@
 lazy val akkaHttpVersion = "10.0.11"
 lazy val akkaVersion    = "2.5.8"
 
-lazy val akkaHttpPac4jVersion = "0.4.6-SNAPSHOT" // FIXME
+lazy val akkaHttpPac4jVersion = "0.5.0-SNAPSHOT" // FIXME
 lazy val pac4jVersion = "3.6.1"
 
 lazy val root = (project in file(".")).
