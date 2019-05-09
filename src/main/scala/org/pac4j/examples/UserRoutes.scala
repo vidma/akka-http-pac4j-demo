@@ -101,7 +101,7 @@ trait UserRoutes extends JsonSupport {
       },
       // for SAML test with openidp.feide.no the callback must be reachable at /callback
       path("callback") {
-        security.callback(defaultUrl = defaultUrl)
+        security.callback(defaultUrl = defaultUrl, setCsrfCookie = false)
       },
       pathPrefix("auth") {
         concat(
